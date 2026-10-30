@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CUFE GPA Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-4 md:p-8 font-sans selection:bg-blue-500 selection:text-white">
+    <div class="max-w-5xl mx-auto">
+        <!-- Header & Top Dashboard -->
+        <div class="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700 mb-6">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-4 gap-4">
+                <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">CUFE GPA Calculator</h1>
+                <div class="space-x-2 flex">
+                    <button onclick="exportData()" class="bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white px-4 py-2 rounded-lg text-sm transition font-medium">
+                        Export JSON
+                    </button>
+                    <label class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm cursor-pointer transition font-medium shadow-lg shadow-blue-500/20">
+                        Import JSON
+                        <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Cumulative Dashboard (TOP) -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-gray-900/80 p-5 rounded-xl text-center border border-gray-700 shadow-inner">
+                    <div class="text-gray-400 text-sm font-semibold mb-1 uppercase tracking-wider">Total Cumulative Credits</div>
+                    <div id="cumCreditsDisplay" class="text-3xl font-bold text-white">0</div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-900/40 to-indigo-900/40 p-5 rounded-xl text-center border border-blue-500/30 shadow-inner shadow-blue-900/20">
+                    <div class="text-blue-300 text-sm font-semibold mb-1 uppercase tracking-wider">Cumulative GPA</div>
+                    <div id="cumGpaDisplay" class="text-5xl font-bold text-blue-400 drop-shadow-md">0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Semesters Container -->
+        <div id="semestersContainer" class="space-y-6">
+            <!-- Semesters dynamically injected here -->
+        </div>
+
+        <button onclick="addSemester()" class="mt-6 mb-6 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl flex justify-center items-center gap-2 transition duration-200 shadow-lg shadow-blue-500/20 border border-blue-400/50">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            Add New Semester
+        </button>
+
+        <!-- Cumulative Dashboard (BOTTOM) -->
+        <div class="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700 mb-6">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-gray-900/80 p-5 rounded-xl text-center border border-gray-700 shadow-inner">
+                    <div class="text-gray-400 text-sm font-semibold mb-1 uppercase tracking-wider">Total Cumulative Credits</div>
+                    <div id="cumCreditsDisplayBottom" class="text-3xl font-bold text-white">0</div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-900/40 to-indigo-900/40 p-5 rounded-xl text-center border border-blue-500/30 shadow-inner shadow-blue-900/20">
+                    <div class="text-blue-300 text-sm font-semibold mb-1 uppercase tracking-wider">Cumulative GPA</div>
+                    <div id="cumGpaDisplayBottom" class="text-5xl font-bold text-blue-400 drop-shadow-md">0.00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Standard CUFE scale
+        const gradePoints = {
+            'A+': 4.0, 'A': 4.0, 'A-': 3.7, 
+            'B+': 3.3, 'B': 3.0, 'B-': 2.7, 
+            'C+': 2.3, 'C': 2.0, 'C-': 1.7, 
+            'D+': 1.3, 'D': 1.0, 'F': 0.0
+        };
+
+        // Data Migration & Loading logic
+        function loadData() {
+            let savedSemesters = localStorage.getItem('gpa_semesters');
+            if (savedSemesters) {
+                return JSON.parse(savedSemesters);
+            } else {
+                let oldCourses = JSON.parse(localStorage.getItem('gpa_courses'));
+                if (oldCourses && oldCourses.length > 0) {
+                    let migrated = [{
+                        id: Date.now(),
+                        name: 'Semester 1',
+                        courses: oldCourses
+                    }];
+                    localStorage.setItem('gpa_semesters', JSON.stringify(migrated));
+                    localStorage.removeItem('gpa_courses');
+                    return migrated;
+                }
+                return [{
+                    id: Date.now(),
+                    name: 'Semester 1',
+                    courses: [{ id: Date.now() + 1, name: '', credits: '', grade: '' }]
+                }];
+            }
+        }
+
+        let semesters = loadData();
+
+        function saveData() {
+            localStorage.setItem('gpa_semesters', JSON.stringify(semesters));
+        }
+
+        // --- Semester Functions ---
+        function addSemester() {
+            semesters.push({
+                id: Date.now(),
+                name: `Semester ${semesters.length + 1}`,
+                courses: [{ id: Date.now() + 1, name: '', credits: '', grade: '' }]
+            });
+            saveData();
+            renderApp();
+        }
+
+        function removeSemester(semId) {
+            if (confirm("Are you sure you want to delete this entire semester?")) {
+                semesters = semesters.filter(s => s.id !== semId);
+                if (semesters.length === 0) {
+                    addSemester(); 
+                } else {
+                    saveData();
+                    renderApp();
+                }
+            }
+        }
+
+        function updateSemesterName(semId, newName) {
+            const sem = semesters.find(s => s.id === semId);
+            if (sem) {
+                sem.name = newName;
+                saveData();
+            }
+        }
+
+        // --- Course Functions ---
+        function addCourse(semId) {
+            const sem = semesters.find(s => s.id === semId);
+            if (sem) {
+                sem.courses.push({ id: Date.now(), name: '', credits: '', grade: '' });
+                saveData();
+                renderApp();
+            }
+        }
+
+        function removeCourse(semId, courseId) {
+            const sem = semesters.find(s => s.id === semId);
+            if (sem) {
+                sem.courses = sem.courses.filter(c => c.id !== courseId);
+                if (sem.courses.length === 0) {
+                    sem.courses.push({ id: Date.now(), name: '', credits: '', grade: '' });
+                }
+                saveData();
+                renderApp();
+            }
+        }
+
+        function updateCourse(semId, courseId, field, value) {
+            const sem = semesters.find(s => s.id === semId);
+            if (sem) {
+                const course = sem.courses.find(c => c.id === courseId);
+                if (course) {
+                    if (field === 'credits') {
+                        course[field] = value === '' ? '' : parseFloat(value);
+                    } else {
+                        course[field] = value;
+                    }
+                    saveData();
+                    updateCalculations();
+                }
+            }
+        }
+
+        // --- Calculation Engine ---
+        function updateCalculations() {
+            let cumCredits = 0;
+            let cumPoints = 0;
+
+            semesters.forEach(sem => {
+                let semCredits = 0;
+                let semPoints = 0;
+
+                sem.courses.forEach(course => {
+                    if (course.credits && course.grade && course.grade !== '') {
+                        const credits = parseFloat(course.credits);
+                        const points = gradePoints[course.grade];
+                        semCredits += credits;
+                        semPoints += (credits * points);
+                    }
+                });
+
+                const semCreditsEl = document.getElementById(`semCreditsDisplay-${sem.id}`);
+                const semGpaEl = document.getElementById(`semGpaDisplay-${sem.id}`);
+                
+                if (semCreditsEl) semCreditsEl.innerText = semCredits;
+                if (semGpaEl) semGpaEl.innerText = semCredits > 0 ? (semPoints / semCredits).toFixed(2) : '0.00';
+
+                cumCredits += semCredits;
+                cumPoints += semPoints;
+            });
+
+            const finalGpa = cumCredits > 0 ? (cumPoints / cumCredits).toFixed(2) : '0.00';
+
+            // Update TOP cumulative displays
+            document.getElementById('cumCreditsDisplay').innerText = cumCredits;
+            document.getElementById('cumGpaDisplay').innerText = finalGpa;
+
+            // Update BOTTOM cumulative displays
+            document.getElementById('cumCreditsDisplayBottom').innerText = cumCredits;
+            document.getElementById('cumGpaDisplayBottom').innerText = finalGpa;
+        }
+
+        // --- Core UI Renderer ---
+        function renderApp() {
+            const container = document.getElementById('semestersContainer');
+            container.innerHTML = '';
+
+            semesters.forEach(sem => {
+                const semDiv = document.createElement('div');
+                semDiv.className = 'bg-gray-800 rounded-xl border border-gray-700 p-4 md:p-6 shadow-md transition-all';
+                
+                const headerHtml = `
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4 pb-4 border-b border-gray-700">
+                        <input type="text" value="${sem.name}" oninput="updateSemesterName(${sem.id}, this.value)"
+                            class="bg-transparent text-xl font-bold text-white focus:outline-none focus:border-b-2 focus:border-blue-500 w-full md:w-1/2 transition-colors" placeholder="Semester Name">
+                        
+                        <div class="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                            <div class="bg-gray-900 px-4 py-2 rounded-lg text-gray-300 text-sm font-medium border border-gray-700 whitespace-nowrap">
+                                Credits: <span id="semCreditsDisplay-${sem.id}" class="text-white font-bold ml-1">0</span>
+                            </div>
+                            <div class="bg-blue-900/30 px-4 py-2 rounded-lg text-blue-300 text-sm font-medium border border-blue-500/30 whitespace-nowrap">
+                                Term GPA: <span id="semGpaDisplay-${sem.id}" class="text-blue-400 font-bold ml-1">0.00</span>
+                            </div>
+                            <button onclick="removeSemester(${sem.id})" class="text-gray-500 hover:text-red-400 p-2 ml-1 transition-colors rounded-lg hover:bg-gray-700" title="Delete Semester">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                let coursesHtml = `<div class="flex flex-col gap-3 mb-4">`;
+                sem.courses.forEach(course => {
+                    coursesHtml += `
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 rounded-lg border border-gray-700 bg-gray-900 focus-within:ring-1 focus-within:ring-blue-500 transition-shadow">
+                            <div class="md:col-span-6">
+                                <input type="text" placeholder="Course Name" value="${course.name}" 
+                                    oninput="updateCourse(${sem.id}, ${course.id}, 'name', this.value)" 
+                                    class="w-full bg-transparent px-2 py-1.5 text-white placeholder-gray-500 focus:outline-none">
+                            </div>
+                            <div class="md:col-span-2">
+                                <input type="number" placeholder="Credits" min="0" step="0.5" value="${course.credits}" 
+                                    oninput="updateCourse(${sem.id}, ${course.id}, 'credits', this.value)" 
+                                    class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors">
+                            </div>
+                            <div class="md:col-span-3 relative">
+                                <select onchange="updateCourse(${sem.id}, ${course.id}, 'grade', this.value)" 
+                                    class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500 appearance-none transition-colors">
+                                    <option value="">Grade</option>
+                                    ${Object.keys(gradePoints).map(g => `<option value="${g}" ${course.grade === g ? 'selected' : ''}>${g} (${gradePoints[g].toFixed(1)})</option>`).join('')}
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                            </div>
+                            <div class="md:col-span-1 flex justify-end">
+                                <button onclick="removeCourse(${sem.id}, ${course.id})" class="text-gray-600 hover:text-red-400 p-2 focus:outline-none transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                coursesHtml += `</div>`;
+                
+                const addCourseBtn = `
+                    <button onclick="addCourse(${sem.id})" class="w-full bg-gray-900/50 hover:bg-gray-700 border border-gray-600 border-dashed text-gray-400 hover:text-gray-200 py-2.5 rounded-lg flex justify-center items-center gap-2 transition text-sm font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Add Course to ${sem.name || 'Semester'}
+                    </button>
+                `;
+
+                semDiv.innerHTML = headerHtml + coursesHtml + addCourseBtn;
+                container.appendChild(semDiv);
+            });
+
+            updateCalculations();
+        }
+
+        // --- Import/Export ---
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(semesters, null, 2));
+            const downloadNode = document.createElement('a');
+            downloadNode.setAttribute("href", dataStr);
+            downloadNode.setAttribute("download", "my_cufe_gpa.json");
+            document.body.appendChild(downloadNode);
+            downloadNode.click();
+            downloadNode.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        if (imported.length > 0 && imported[0].courses) {
+                            semesters = imported;
+                        } else if (imported.length > 0 && imported[0].grade !== undefined) {
+                            semesters = [{ id: Date.now(), name: 'Imported Semester', courses: imported }];
+                        }
+                        saveData();
+                        renderApp();
+                    } else {
+                        alert("Invalid file format");
+                    }
+                } catch (err) {
+                    alert("Error parsing JSON file");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // --- Initialization ---
+        renderApp();
+    </script>
+</body>
+</html>
